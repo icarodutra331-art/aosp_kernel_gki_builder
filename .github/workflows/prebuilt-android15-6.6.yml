@@ -12,13 +12,13 @@ name: Checkout
 
       
 name: Build Kernel
-      uses: dcl666/aosp-kernel-gki-builder@main
+      uses: dc1666/aosp-kernel-gki-builder@main
       with:
         kernel-version: '6.6'
         kernelsu-variant: 'next'
         susfs: true
         susfs-version: 'v1.5.2'
-     additional-kconfig: |
-        CONFIG_LOCALVERSION="-S928B-Samsung-S24Ultra"
-        CONFIG_KSU_SUSFS=y
-        CONFIG_KPROBES=y
+        additional-kconfig: |
+          CONFIG_LOCALVERSION="-S928B-Samsung-S24Ultra"
+          CONFIG_KSU_SUSFS=y
+          CONFIG_KPROBES=y
