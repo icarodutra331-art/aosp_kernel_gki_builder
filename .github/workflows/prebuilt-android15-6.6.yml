@@ -18,7 +18,7 @@ name: Build Kernel
         kernelsu-variant: 'next'
         susfs: true
         susfs-version: 'v1.5.2'
-        additional-kconfig:
-          CONFIG_LOCALVERSION="-S928B-Samsung-S24Ultra"
-          CONFIG_KSU_SUSFS=y# Desativa logs que o Duck Detector lê
-          CONFIG_KPROBES=n
+     additional-kconfig: |
+        CONFIG_LOCALVERSION="-S928B-Samsung-S24Ultra"
+        CONFIG_KSU_SUSFS=y
+        CONFIG_KPROBES=y
