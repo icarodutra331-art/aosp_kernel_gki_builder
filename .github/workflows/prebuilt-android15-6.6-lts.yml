@@ -1,4 +1,4 @@
-name: 🏗️ MOTO G75 - V11.2 FIX
+name: 🏗️ MOTO G75 - V12.1
 on:
   workflow_dispatch:
 
@@ -34,62 +34,54 @@ jobs:
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
 
-    - name: 🔧 Configuração V11.2 (Sem comentários para não dar erro)
+    - name: 🔧 Configuração V12.1 (Foco no Tamanho)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         make O=out ARCH=arm64 ${{ env.KERNEL_CONFIG }}
         
         ./scripts/config --file out/.config \
-          -d CONFIG_DRM \
-          -d CONFIG_SOUND \
-          -d CONFIG_WLAN \
-          -d CONFIG_BT \
-          -d CONFIG_KPROBES \
-          -d CONFIG_VIDEO_V4L2 \
-          -d CONFIG_MODULES \
-          -d CONFIG_DEBUG_KERNEL \
-          -d CONFIG_STAGING \
-          -d CONFIG_JOYSTICK \
-          -d CONFIG_INPUT_MOUSE \
-          -d CONFIG_NTFS_FS \
-          -d CONFIG_NFS_FS \
           -e CONFIG_KSU_NEXT_MANUAL_HOOK \
           -e CONFIG_KSU_SUSFS \
           -e CONFIG_TCP_CONG_BBR \
           -e CONFIG_IP_SET \
           -e CONFIG_NETFILTER_XT_TARGET_HL \
           -e CONFIG_CC_OPTIMIZE_FOR_SIZE \
-          --set-str CONFIG_LOCALVERSION "-HMBIRD-V11-FATAL"
+          -d CONFIG_MODULES \
+          -d CONFIG_KPROBES \
+          -d CONFIG_DEBUG_KERNEL \
+          --set-str CONFIG_LOCALVERSION "-HMBIRD-V12-G75"
 
-    - name: 🏗️ Compilação
+    - name: 🏗️ Compilação (Sem cortes de drivers para não quebrar)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1
+        # Compressão máxima XZ
         xz -9 -e -c out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.xz
 
-    - name: 📦 AnyKernel3 Final
+    - name: 📦 AnyKernel3 (Caminho Direto init_boot)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone https://github.com/osm0sis/AnyKernel3.git
         cat <<EOF > AnyKernel3/anykernel.sh
         properties() { '
-        kernel.string=HMBIRD-V11.2-FATAL
+        kernel.string=HMBIRD-V12.1-G75
         do.devicecheck=0
         do.modules=0
         do.systemless=1
         do.cleanup=1
         '; }
-        block=auto;
-        is_slot_device=auto;
+        # Forçando o caminho do bloco para o G75
+        block=/dev/block/by-name/init_boot;
+        is_slot_device=1;
         . tools/ak3-core.sh;
         split_boot;
         flash_boot;
         EOF
         cp android-kernel/out/arch/arm64/boot/Image.xz AnyKernel3/Image.xz
-        cd AnyKernel3 && zip -r ../HMBIRD-V11-2-FINAL.zip .
+        cd AnyKernel3 && zip -r ../HMBIRD-V12-1.zip .
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: HMBIRD-V11-2-FINAL
-        path: kernel_workspace/HMBIRD-V11-2-FINAL.zip
+        name: HMBIRD-V12-1-FINAL
+        path: kernel_workspace/HMBIRD-V12-1.zip
