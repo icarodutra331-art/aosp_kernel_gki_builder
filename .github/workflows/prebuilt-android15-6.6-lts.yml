@@ -1,4 +1,4 @@
-name: 🏗️ MOTO G75 - V11.1 FATAL SLIM
+name: 🏗️ MOTO G75 - V11.2 FIX
 on:
   workflow_dispatch:
 
@@ -26,7 +26,7 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} android-kernel --depth=1
 
-    - name: ඞ Injetar KernelSU Next + SusFS (Build 🛡️)
+    - name: ඞ Injetar KernelSU Next + SusFS
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
@@ -34,12 +34,11 @@ jobs:
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
 
-    - name: 🔧 Configuração V11.1 (Ativando as Builds e Cortando Gordura)
+    - name: 🔧 Configuração V11.2 (Sem comentários para não dar erro)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         make O=out ARCH=arm64 ${{ env.KERNEL_CONFIG }}
         
-        # 🪓 CORTES PARA ECONOMIZAR ESPAÇO (Removendo o que é pesado)
         ./scripts/config --file out/.config \
           -d CONFIG_DRM \
           -d CONFIG_SOUND \
@@ -54,8 +53,6 @@ jobs:
           -d CONFIG_INPUT_MOUSE \
           -d CONFIG_NTFS_FS \
           -d CONFIG_NFS_FS \
-          \
-          # 🚀 ATIVANDO SUAS BUILDS (O que importa!)
           -e CONFIG_KSU_NEXT_MANUAL_HOOK \
           -e CONFIG_KSU_SUSFS \
           -e CONFIG_TCP_CONG_BBR \
@@ -64,21 +61,19 @@ jobs:
           -e CONFIG_CC_OPTIMIZE_FOR_SIZE \
           --set-str CONFIG_LOCALVERSION "-HMBIRD-V11-FATAL"
 
-    - name: 🏗️ Compilação (Modo Extreme)
+    - name: 🏗️ Compilação
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1
-        
-        # Compressão Máxima para garantir o flash
         xz -9 -e -c out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.xz
 
-    - name: 📦 AnyKernel3 Final (Fix Partition Error)
+    - name: 📦 AnyKernel3 Final
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone https://github.com/osm0sis/AnyKernel3.git
         cat <<EOF > AnyKernel3/anykernel.sh
         properties() { '
-        kernel.string=HMBIRD-V11.1-FATAL
+        kernel.string=HMBIRD-V11.2-FATAL
         do.devicecheck=0
         do.modules=0
         do.systemless=1
@@ -91,10 +86,10 @@ jobs:
         flash_boot;
         EOF
         cp android-kernel/out/arch/arm64/boot/Image.xz AnyKernel3/Image.xz
-        cd AnyKernel3 && zip -r ../HMBIRD-V11-1-FINAL.zip .
+        cd AnyKernel3 && zip -r ../HMBIRD-V11-2-FINAL.zip .
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: HMBIRD-V11-1-FINAL
-        path: kernel_workspace/HMBIRD-V11-1-FINAL.zip
+        name: HMBIRD-V11-2-FINAL
+        path: kernel_workspace/HMBIRD-V11-2-FINAL.zip
