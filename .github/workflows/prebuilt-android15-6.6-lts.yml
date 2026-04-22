@@ -1,4 +1,4 @@
-name: 🏗️ MOTO G75 - ULTRA HMBIRD GKI
+name: 🏗️ MOTO G75 - ULTRA HMBIRD GKI (FIXED)
 on:
   workflow_dispatch:
     inputs:
@@ -37,25 +37,27 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} android-kernel --depth=1
 
-    - name: ඞ Injetar KernelSU Next + SusFS v2.1.0
+    - name: ඞ Injetar KernelSU Next + SusFS (FIXED CLONE)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        # KernelSU Next (O mais forte contra o Pato)
+        # KernelSU Next
         curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
-        # Patches SusFS para invisibilidade total
-        git clone https://gitlab.com/simonpunk/susfs4kernel.git
-        cp susfs4kernel/kernel_patches/fs/susfs.c fs/
-        cp susfs4kernel/kernel_patches/include/linux/susfs.h include/linux/
+        
+        # Correção do SusFS: Baixando via link direto ou zip para evitar erro de Username
+        mkdir -p fs include/linux
+        # Nota: Ajustei para buscar os arquivos de um mirror estável para evitar o erro 128
+        curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
+        curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
 
-    - name: 🔧 Configuração Hardcore (HMBIRD + BBR + IPSET + IPv6 + Unicode)
+    - name: 🔧 Configuração Hardcore (HMBIRD + BBR + IPSET + IPv6 + Unicode + 4K)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         
-        # 🧱 INFRAESTRUTURA: 4K Page Size (Obrigatório G75)
+        # 🧱 INFRAESTRUTURA: Forçar 4K (Obrigatório para sua build 6.6.87-8-4k)
         echo "CONFIG_ARM64_4K_PAGES=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "# CONFIG_ARM64_16K_PAGES is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         
-        # 🚀 PERFORMANCE: BBR + BBG Otimizações
+        # 🚀 PERFORMANCE: BBR + BBG (Scheduler)
         echo "CONFIG_TCP_CONG_BBR=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "CONFIG_DEFAULT_TCP_CONG=\"bbr\"" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "CONFIG_SCHED_AUTOGROUP=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
@@ -67,12 +69,12 @@ jobs:
         echo "CONFIG_IP6_NF_NAT=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "CONFIG_IP6_NF_TARGET_MASQUERADE=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         
-        # 🛡️ SEGURANÇA & FIXES: SusFS + KPROBES + Unicode
+        # 🛡️ SEGURANÇA: SusFS + KPROBES + Unicode Fix
         echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "CONFIG_KPROBES=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "CONFIG_UNICODE=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         
-        # 📱 SPOOFING: Identidade de S24 Ultra
+        # 📱 SPOOFING S24 Ultra
         sed -i 's/CONFIG_LOCALVERSION=""/CONFIG_LOCALVERSION="-S928B-Samsung-S24Ultra-HMBIRD-4K"/g' arch/arm64/configs/${{ env.KERNEL_CONFIG }}
 
     - name: 🏗️ Compilação GKI
