@@ -1,9 +1,9 @@
-name: 🏗️ MOTO G75 - ULTRA HMBIRD GKI (FIXED)
+name: 🏗️ MOTO G75 - ULTRA HMBIRD SLIM
 on:
   workflow_dispatch:
     inputs:
       release:
-        description: "Fazer Release no GitHub?"
+        description: "Fazer Release?"
         required: true
         default: true
         type: boolean
@@ -22,9 +22,9 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Preparar Ambiente
+    - name: Instalar Ferramentas (lz4 incluído)
       run: |
-        sudo apt update && sudo apt install -y git ccache flex bison build-essential bc curl libssl-dev libelf-dev clang lld llvm
+        sudo apt update && sudo apt install -y git ccache flex bison build-essential bc curl libssl-dev libelf-dev clang lld llvm lz4
         mkdir -p $GITHUB_WORKSPACE/kernel_workspace
 
     - name: Memória Swap (10GB)
@@ -32,72 +32,73 @@ jobs:
       with:
         swap-size-gb: 10
 
-    - name: Download Fonte Kernel (6.6.87 Base)
+    - name: Download Fonte Kernel
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} android-kernel --depth=1
 
-    - name: ඞ Injetar KernelSU Next + SusFS (FIXED CLONE)
+    - name: ඞ Injetar KernelSU Next + SusFS (FIXED)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        # KernelSU Next
         curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
-        
-        # Correção do SusFS: Baixando via link direto ou zip para evitar erro de Username
         mkdir -p fs include/linux
-        # Nota: Ajustei para buscar os arquivos de um mirror estável para evitar o erro 128
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
 
-    - name: 🔧 Configuração Hardcore (HMBIRD + BBR + IPSET + IPv6 + Unicode + 4K)
+    - name: 🔧 TODAS AS BUILDS (4K + BBR + IPSET + IPv6 + TTL + Unicode)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        
-        # 🧱 INFRAESTRUTURA: Forçar 4K (Obrigatório para sua build 6.6.87-8-4k)
+        # 🏗️ INFRAESTRUTURA
         echo "CONFIG_ARM64_4K_PAGES=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "# CONFIG_ARM64_16K_PAGES is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        
-        # 🚀 PERFORMANCE: BBR + BBG (Scheduler)
+        # 🚀 PERFORMANCE (BBR + BBG)
         echo "CONFIG_TCP_CONG_BBR=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "CONFIG_DEFAULT_TCP_CONG=\"bbr\"" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "CONFIG_SCHED_AUTOGROUP=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        
-        # 🌐 REDE: TTL + IP_SET + IPv6 NAT
-        echo "CONFIG_NETFILTER_XT_TARGET_HL=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        # 🌐 REDE (IPSET + IPv6 NAT + TTL)
         echo "CONFIG_IP_SET=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "CONFIG_IP_SET_HASH_IP=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "CONFIG_IP6_NF_NAT=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "CONFIG_IP6_NF_TARGET_MASQUERADE=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        
-        # 🛡️ SEGURANÇA: SusFS + KPROBES + Unicode Fix
+        echo "CONFIG_NETFILTER_XT_TARGET_HL=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        # 🛡️ FIXES (SusFS + Unicode)
         echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "CONFIG_KPROBES=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "CONFIG_UNICODE=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        
         # 📱 SPOOFING S24 Ultra
         sed -i 's/CONFIG_LOCALVERSION=""/CONFIG_LOCALVERSION="-S928B-Samsung-S24Ultra-HMBIRD-4K"/g' arch/arm64/configs/${{ env.KERNEL_CONFIG }}
 
-    - name: 🏗️ Compilação GKI
+    - name: 🏗️ Compilação e Compressão Máxima (LZ4 -9)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1 ${{ env.KERNEL_CONFIG }}
         make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1
+        # O segredo para caber nos 8MB:
+        lz4 -9 out/arch/arm64/boot/Image out/arch/arm64/boot/Image.lz4
 
-    - name: 📦 Gerar AnyKernel3.zip
+    - name: 📦 AnyKernel3 Slim (Fixed for GKI)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone https://github.com/osm0sis/AnyKernel3.git
-        sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
-        cp android-kernel/out/arch/arm64/boot/Image AnyKernel3/
-        cd AnyKernel3 && zip -r ../AnyKernel3-G75-HMBIRD-ULTRA.zip .
+        cat <<EOF > AnyKernel3/anykernel.sh
+        properties() { '
+        kernel.string=HMBIRD-ULTRA-SLIM-G75
+        do.devicecheck=0
+        do.modules=0
+        do.systemless=1
+        do.cleanup=1
+        '; }
+        block=auto;
+        is_slot_device=auto;
+        . tools/ak3-core.sh;
+        split_boot;
+        flash_boot;
+        EOF
+        cp android-kernel/out/arch/arm64/boot/Image.lz4 AnyKernel3/Image.lz4
+        cd AnyKernel3 && zip -r ../AnyKernel3-G75-HMBIRD-FINAL.zip .
 
-    - name: 🚀 Release
-      uses: softprops/action-gh-release@v2
-      if: github.event.inputs.release == 'true'
+    - name: Upload
+      uses: actions/upload-artifact@v4
       with:
-        tag_name: HMBIRD-G75-FINAL
-        files: |
-          kernel_workspace/AnyKernel3-G75-HMBIRD-ULTRA.zip
-          kernel_workspace/android-kernel/out/arch/arm64/boot/Image
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        name: HMBIRD-G75-SLIM
+        path: kernel_workspace/AnyKernel3-G75-HMBIRD-FINAL.zip
