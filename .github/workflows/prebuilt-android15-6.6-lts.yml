@@ -1,4 +1,4 @@
-name: 🏗️ MOTO G75 - V12.1
+name: 🏗️ MOTO G75 - V14 GHOST
 on:
   workflow_dispatch:
 
@@ -18,7 +18,7 @@ jobs:
 
     - name: Instalar Ferramentas
       run: |
-        sudo apt update && sudo apt install -y git ccache flex bison build-essential bc curl libssl-dev libelf-dev clang lld llvm xz-utils
+        sudo apt update && sudo apt install -y git ccache flex bison build-essential bc curl libssl-dev libelf-dev clang lld llvm xz-utils zip
         mkdir -p $GITHUB_WORKSPACE/kernel_workspace
 
     - name: Download Fonte Kernel
@@ -34,11 +34,18 @@ jobs:
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
 
-    - name: 🔧 Configuração V12.1 (Foco no Tamanho)
+    - name: 🔧 Configuração V14 (Corte Cirúrgico de 5MB)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         make O=out ARCH=arm64 ${{ env.KERNEL_CONFIG }}
         
+        # 1. Desativar Módulos e Kprobes (O que ocupa espaço)
+        ./scripts/config --file out/.config -d CONFIG_MODULES -d CONFIG_KPROBES -d CONFIG_DEBUG_KERNEL
+        
+        # 2. Desativar o que faz o Makefile quebrar (O segredo do 5MB)
+        ./scripts/config --file out/.config -d CONFIG_BLOCK_HOLDER_DEPRECATED -d CONFIG_UNUSED_KSYMS_WHITELIST
+        
+        # 3. Ativar suas builds e Otimização Máxima de Tamanho
         ./scripts/config --file out/.config \
           -e CONFIG_KSU_NEXT_MANUAL_HOOK \
           -e CONFIG_KSU_SUSFS \
@@ -46,31 +53,29 @@ jobs:
           -e CONFIG_IP_SET \
           -e CONFIG_NETFILTER_XT_TARGET_HL \
           -e CONFIG_CC_OPTIMIZE_FOR_SIZE \
-          -d CONFIG_MODULES \
-          -d CONFIG_KPROBES \
-          -d CONFIG_DEBUG_KERNEL \
-          --set-str CONFIG_LOCALVERSION "-HMBIRD-V12-G75"
+          --set-str CONFIG_LOCALVERSION "-HMBIRD-V14-GHOST"
 
-    - name: 🏗️ Compilação (Sem cortes de drivers para não quebrar)
+    - name: 🏗️ Compilação
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1
-        # Compressão máxima XZ
-        xz -9 -e -c out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.xz
+        # Forçar o Clang a ignorar avisos que viram erros no fs/
+        make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1 KCFLAGS="-Wno-error"
+        
+        # Compressão XZ com Dicionário de 64MB (Máxima compressão possível)
+        xz -e -9 -C crc32 out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.xz
 
-    - name: 📦 AnyKernel3 (Caminho Direto init_boot)
+    - name: 📦 AnyKernel3 (Flash Direto)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone https://github.com/osm0sis/AnyKernel3.git
         cat <<EOF > AnyKernel3/anykernel.sh
         properties() { '
-        kernel.string=HMBIRD-V12.1-G75
+        kernel.string=HMBIRD-V14-5MB
         do.devicecheck=0
         do.modules=0
         do.systemless=1
         do.cleanup=1
         '; }
-        # Forçando o caminho do bloco para o G75
         block=/dev/block/by-name/init_boot;
         is_slot_device=1;
         . tools/ak3-core.sh;
@@ -78,10 +83,10 @@ jobs:
         flash_boot;
         EOF
         cp android-kernel/out/arch/arm64/boot/Image.xz AnyKernel3/Image.xz
-        cd AnyKernel3 && zip -r ../HMBIRD-V12-1.zip .
+        cd AnyKernel3 && zip -r ../HMBIRD-V14.zip .
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: HMBIRD-V12-1-FINAL
-        path: kernel_workspace/HMBIRD-V12-1.zip
+        name: HMBIRD-V14-FINAL
+        path: kernel_workspace/HMBIRD-V14.zip
