@@ -1,4 +1,4 @@
-name: 🏗️ MOTO G75 - V19.7 FINAL FIX
+name: 🏗️ MOTO G75 - V19.9 FINAL STRIKE
 on:
   workflow_dispatch:
 
@@ -19,25 +19,25 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone https://android.googlesource.com/kernel/common -b android15-6.6 --depth=1 android-kernel
 
-    - name: ඞ Injetar KSU + SusFS + EDITAR MAKEFILES
+    - name: ඞ Injeção Profunda KSU + SusFS
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         # KernelSU Next
         curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
         
-        # Download SusFS
-        mkdir -p fs include/linux
+        # Download SusFS - Injetando diretamente nas pastas CORE do Kernel
         curl -L "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
+        # ESTE É O PONTO CHAVE: Injetando no include/uapi para visibilidade global
         curl -L "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
         
-        # [O PULO DO GATO] -> Ensinando o Makefile a ler o SusFS
-        echo "obj-y += susfs.o" >> fs/Makefile
-        echo 'ccflags-y += -I$(srctree)/include' >> fs/Makefile
+        # Forçar a inclusão no Makefile com caminho absoluto interno
+        sed -i '/obj-y += sys.o/a obj-y += susfs.o' fs/Makefile
         
-        # Verificação
-        if [ ! -f "fs/susfs.c" ]; then echo "Erro download"; exit 1; fi
+        # Verificar se os ficheiros estão nos lugares certos
+        ls -l fs/susfs.c
+        ls -l include/linux/susfs.h
 
-    - name: 🔧 Configuração V19.7
+    - name: 🔧 Configuração V19.9
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         make O=out ARCH=arm64 gki_defconfig
@@ -53,7 +53,7 @@ jobs:
           -d CONFIG_DEBUG_INFO_BTF \
           --set-str CONFIG_LOCALVERSION "-HMBIRD-FIXED"
 
-    - name: 🏗️ Compilação Brutal
+    - name: 🏗️ Compilação Final
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         make -j$(nproc --all) O=out ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1
@@ -63,7 +63,7 @@ jobs:
         
         echo "TAMANHO FINAL:" && du -h out/arch/arm64/boot/Image.xz
 
-    - name: 📦 AnyKernel3 (Usando seu init_boot)
+    - name: 📦 AnyKernel3
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone https://github.com/osm0sis/AnyKernel3.git
@@ -72,7 +72,7 @@ jobs:
         
         cat <<EOF > AnyKernel3/anykernel.sh
         properties() { '
-        kernel.string=HMBIRD-V19.7-G75
+        kernel.string=HMBIRD-V19.9-G75
         do.devicecheck=0
         do.modules=0
         do.systemless=1
@@ -84,10 +84,10 @@ jobs:
         split_boot;
         flash_boot;
         EOF
-        cd AnyKernel3 && zip -r ../G75-V19.7.zip .
+        cd AnyKernel3 && zip -r ../G75-V19.9.zip .
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: G75-V19.7-FINAL
-        path: G75-V19.7.zip
+        name: G75-V19.9-FINAL
+        path: G75-V19.9.zip
