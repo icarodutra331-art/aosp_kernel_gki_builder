@@ -1,93 +1,112 @@
-name: 🏗️ MOTO G75 - V19.9 FINAL STRIKE
+name: 🏗️ MOTO G75 - V21 SLIM KING
 on:
   workflow_dispatch:
 
 jobs:
   build:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
+    env:
+      KERNEL_SOURCE: "https://android.googlesource.com/kernel/common"
+      KERNEL_SOURCE_BRANCH: "android15-6.6"
+      KERNEL_CONFIG: "gki_defconfig"
+      ARCH: "arm64"
     steps:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Instalar Dependências
+    - name: Instalar Ferramentas
       run: |
-        sudo apt update && sudo apt install -y git ccache flex bison build-essential bc curl libssl-dev libelf-dev clang lld llvm xz-utils zip
+        sudo apt update && sudo apt install -y git ccache flex bison build-essential bc curl libssl-dev libelf-dev clang lld llvm xz-utils
         mkdir -p $GITHUB_WORKSPACE/kernel_workspace
 
     - name: Download Fonte Kernel
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
-        git clone https://android.googlesource.com/kernel/common -b android15-6.6 --depth=1 android-kernel
+        git clone ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} android-kernel --depth=1
 
-    - name: ඞ Injeção Profunda KSU + SusFS
+    - name: ඞ Injetar KernelSU Next + SusFS + Fix Makefile
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        # KernelSU Next
         curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
+        mkdir -p fs include/linux
+        curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
+        curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
         
-        # Download SusFS - Injetando diretamente nas pastas CORE do Kernel
-        curl -L "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
-        # ESTE É O PONTO CHAVE: Injetando no include/uapi para visibilidade global
-        curl -L "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
-        
-        # Forçar a inclusão no Makefile com caminho absoluto interno
-        sed -i '/obj-y += sys.o/a obj-y += susfs.o' fs/Makefile
-        
-        # Verificar se os ficheiros estão nos lugares certos
-        ls -l fs/susfs.c
-        ls -l include/linux/susfs.h
+        # Garante que o SusFS seja compilado (O segredo que faltava)
+        echo "obj-y += susfs.o" >> fs/Makefile
 
-    - name: 🔧 Configuração V19.9
+    - name: 🔧 Configuração V21 (Otimização de Espaço)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        make O=out ARCH=arm64 gki_defconfig
         
-        ./scripts/config --file out/.config \
-          -e CONFIG_KSU_NEXT_MANUAL_HOOK \
-          -e CONFIG_KSU_SUSFS \
-          -e CONFIG_TCP_CONG_BBR \
-          -e CONFIG_NETFILTER_XT_TARGET_HL \
-          -e CONFIG_IP_SET \
-          -e CONFIG_CC_OPTIMIZE_FOR_SIZE \
-          -d CONFIG_DEBUG_INFO \
-          -d CONFIG_DEBUG_INFO_BTF \
-          --set-str CONFIG_LOCALVERSION "-HMBIRD-FIXED"
+        # Inserindo configs direto no defconfig (Igual sua V10)
+        CONF="arch/arm64/configs/${{ env.KERNEL_CONFIG }}"
+        
+        echo "# CONFIG_KPROBES is not set" >> $CONF
+        echo "CONFIG_KSU_NEXT_MANUAL_HOOK=y" >> $CONF
+        echo "CONFIG_KSU_SUSFS=y" >> $CONF
+        
+        # Cortes de peso (Removendo o que o GKI traz de "lixo")
+        echo "# CONFIG_DRM is not set" >> $CONF
+        echo "# CONFIG_SOUND is not set" >> $CONF
+        echo "# CONFIG_DEBUG_INFO is not set" >> $CONF
+        echo "CONFIG_CC_OPTIMIZE_FOR_SIZE=y" >> $CONF
+        
+        # Performance & Networking
+        echo "CONFIG_TCP_CONG_BBR=y" >> $CONF
+        echo "CONFIG_IP_SET=y" >> $CONF
+        echo "CONFIG_NETFILTER_XT_TARGET_HL=y" >> $CONF
+        
+        # Nome Customizado
+        sed -i 's/CONFIG_LOCALVERSION=""/CONFIG_LOCALVERSION="-HMBIRD-V21-SLIM"/g' $CONF
 
-    - name: 🏗️ Compilação Final
+    - name: 🏗️ Compilação e Strip All
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        make -j$(nproc --all) O=out ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1
+        make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1 ${{ env.KERNEL_CONFIG }}
+        make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1
         
-        llvm-strip --strip-debug out/arch/arm64/boot/Image
-        xz -9 -e --check=crc32 out/arch/arm64/boot/Image
+        # REMOVENDO SÍMBOLOS DESNECESSÁRIOS (Onde ganhamos MBs)
+        llvm-strip --strip-all out/arch/arm64/boot/Image
         
-        echo "TAMANHO FINAL:" && du -h out/arch/arm64/boot/Image.xz
+        # COMPRESSÃO XZ EXTREMA (-9e)
+        xz -9 -e -c out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.xz
+        
+        echo "TAMANHO DA IMAGE.XZ:"
+        du -h out/arch/arm64/boot/Image.xz
 
-    - name: 📦 AnyKernel3
+    - name: 📦 AnyKernel3 Slim (Repack com seu original)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone https://github.com/osm0sis/AnyKernel3.git
-        cp $GITHUB_WORKSPACE/init_boot.img AnyKernel3/init_boot.img
-        cp android-kernel/out/arch/arm64/boot/Image.xz AnyKernel3/Image.xz
         
+        # Se você tiver o init_boot.img na raiz, o script vai usar ele
+        if [ -f "$GITHUB_WORKSPACE/init_boot.img" ]; then
+           cp $GITHUB_WORKSPACE/init_boot.img AnyKernel3/init_boot.img
+        fi
+
         cat <<EOF > AnyKernel3/anykernel.sh
         properties() { '
-        kernel.string=HMBIRD-V19.9-G75
+        kernel.string=HMBIRD-V21-SLIM
         do.devicecheck=0
         do.modules=0
         do.systemless=1
         do.cleanup=1
         '; }
-        block=/dev/block/by-name/init_boot;
-        is_slot_device=1;
+        block=auto;
+        is_slot_device=auto;
         . tools/ak3-core.sh;
         split_boot;
         flash_boot;
         EOF
-        cd AnyKernel3 && zip -r ../G75-V19.9.zip .
+        
+        cp android-kernel/out/arch/arm64/boot/Image.xz AnyKernel3/Image.xz
+        cd AnyKernel3 && zip -r ../HMBIRD-V21-FINAL.zip .
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: G75-V19.9-FINAL
-        path: G75-V19.9.zip
+        name: HMBIRD-V21-FINAL
+        path: kernel_workspace/HMBIRD-V21-FINAL.zip
