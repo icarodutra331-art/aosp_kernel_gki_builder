@@ -1,4 +1,4 @@
-name: 🏗️ MOTO G75 - V10 FINAL HOPE
+name: 🏗️ MOTO G75 - V11.1 FATAL SLIM
 on:
   workflow_dispatch:
 
@@ -26,7 +26,7 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} android-kernel --depth=1
 
-    - name: ඞ Injetar KernelSU Next + SusFS
+    - name: ඞ Injetar KernelSU Next + SusFS (Build 🛡️)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
@@ -34,46 +34,51 @@ jobs:
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
 
-    - name: 🔧 Configuração V10 (O Corte Definitivo)
+    - name: 🔧 Configuração V11.1 (Ativando as Builds e Cortando Gordura)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        make O=out ARCH=arm64 ${{ env.KERNEL_CONFIG }}
         
-        # ✂️ REMOÇÃO DO KPROBES (Economiza ~2MB e resolve conflitos)
-        echo "# CONFIG_KPROBES is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "CONFIG_KSU_NEXT_MANUAL_HOOK=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        
-        # 💣 MANTENDO OS CORTES DA V9.1 (Som, Vídeo, Wi-Fi base)
-        echo "# CONFIG_DRM is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "# CONFIG_SOUND is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "# CONFIG_WLAN is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "# CONFIG_BT is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        
-        # 🚀 BUILDS HMBIRD PERFORMANCE
-        echo "CONFIG_TCP_CONG_BBR=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "CONFIG_DEFAULT_TCP_CONG=\"bbr\"" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "CONFIG_IP_SET=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "CONFIG_NETFILTER_XT_TARGET_HL=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        
-        # 📱 SPOOFING S24 Ultra
-        sed -i 's/CONFIG_LOCALVERSION=""/CONFIG_LOCALVERSION="-S928B-HMBIRD-V10"/g' arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "CONFIG_CC_OPTIMIZE_FOR_SIZE=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        # 🪓 CORTES PARA ECONOMIZAR ESPAÇO (Removendo o que é pesado)
+        ./scripts/config --file out/.config \
+          -d CONFIG_DRM \
+          -d CONFIG_SOUND \
+          -d CONFIG_WLAN \
+          -d CONFIG_BT \
+          -d CONFIG_KPROBES \
+          -d CONFIG_VIDEO_V4L2 \
+          -d CONFIG_MODULES \
+          -d CONFIG_DEBUG_KERNEL \
+          -d CONFIG_STAGING \
+          -d CONFIG_JOYSTICK \
+          -d CONFIG_INPUT_MOUSE \
+          -d CONFIG_NTFS_FS \
+          -d CONFIG_NFS_FS \
+          \
+          # 🚀 ATIVANDO SUAS BUILDS (O que importa!)
+          -e CONFIG_KSU_NEXT_MANUAL_HOOK \
+          -e CONFIG_KSU_SUSFS \
+          -e CONFIG_TCP_CONG_BBR \
+          -e CONFIG_IP_SET \
+          -e CONFIG_NETFILTER_XT_TARGET_HL \
+          -e CONFIG_CC_OPTIMIZE_FOR_SIZE \
+          --set-str CONFIG_LOCALVERSION "-HMBIRD-V11-FATAL"
 
-    - name: 🏗️ Compilação e Compressão
+    - name: 🏗️ Compilação (Modo Extreme)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1 ${{ env.KERNEL_CONFIG }}
         make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1
-        xz -9 -c out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.xz
+        
+        # Compressão Máxima para garantir o flash
+        xz -9 -e -c out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.xz
 
-    - name: 📦 AnyKernel3 Slim (Fix Partition Error)
+    - name: 📦 AnyKernel3 Final (Fix Partition Error)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone https://github.com/osm0sis/AnyKernel3.git
-        # Limpar o anykernel.sh para não dar erro de partição
         cat <<EOF > AnyKernel3/anykernel.sh
         properties() { '
-        kernel.string=HMBIRD-V10-G75
+        kernel.string=HMBIRD-V11.1-FATAL
         do.devicecheck=0
         do.modules=0
         do.systemless=1
@@ -86,10 +91,10 @@ jobs:
         flash_boot;
         EOF
         cp android-kernel/out/arch/arm64/boot/Image.xz AnyKernel3/Image.xz
-        cd AnyKernel3 && zip -r ../HMBIRD-V10.zip .
+        cd AnyKernel3 && zip -r ../HMBIRD-V11-1-FINAL.zip .
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: HMBIRD-V10-FINAL
-        path: kernel_workspace/HMBIRD-V10.zip
+        name: HMBIRD-V11-1-FINAL
+        path: kernel_workspace/HMBIRD-V11-1-FINAL.zip
