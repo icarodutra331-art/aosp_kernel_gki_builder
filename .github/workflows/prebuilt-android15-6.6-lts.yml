@@ -1,4 +1,4 @@
-name: 🏗️ MOTO G75 - V6 PURE HMBIRD (NO UNICODE)
+name: 🏗️ MOTO G75 - V7 ULTIMATE HMBIRD (XZ COMPRESS)
 on:
   workflow_dispatch:
 
@@ -16,9 +16,9 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Instalar Ferramentas
+    - name: Instalar Ferramentas (XZ incluído)
       run: |
-        sudo apt update && sudo apt install -y git ccache flex bison build-essential bc curl libssl-dev libelf-dev clang lld llvm lz4 gzip
+        sudo apt update && sudo apt install -y git ccache flex bison build-essential bc curl libssl-dev libelf-dev clang lld llvm xz-utils
         mkdir -p $GITHUB_WORKSPACE/kernel_workspace
 
     - name: Memória Swap (10GB)
@@ -39,13 +39,15 @@ jobs:
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
 
-    - name: 🔧 Build HMBIRD (Performance & Stealth)
+    - name: 🔧 Build HMBIRD (Dieta Extrema V7)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        # 🧊 DIETA PARA CABER NOS 8MB
+        # 🧊 OTIMIZAÇÃO PARA TAMANHO MÁXIMO
         echo "CONFIG_CC_OPTIMIZE_FOR_SIZE=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "# CONFIG_DEBUG_INFO is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "# CONFIG_UNICODE is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        echo "CONFIG_DEBUG_INFO_NONE=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        echo "# CONFIG_DEBUG_KERNEL is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        echo "# CONFIG_FTRACE is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        echo "# CONFIG_STACKTRACE is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         
         # 🚀 PERFORMANCE (BBR + BBG)
         echo "CONFIG_TCP_CONG_BBR=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
@@ -64,23 +66,24 @@ jobs:
         echo "CONFIG_KPROBES=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         
         # 📱 SPOOFING S24 Ultra
-        sed -i 's/CONFIG_LOCALVERSION=""/CONFIG_LOCALVERSION="-S928B-HMBIRD-G75-ULTRA"/g' arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        sed -i 's/CONFIG_LOCALVERSION=""/CONFIG_LOCALVERSION="-S928B-HMBIRD-G75-V7"/g' arch/arm64/configs/${{ env.KERNEL_CONFIG }}
 
-    - name: 🏗️ Compilação e Compressão Máxima
+    - name: 🏗️ Compilação e Compressão XZ (-9)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1 ${{ env.KERNEL_CONFIG }}
         make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1
-        # Gzip -9 é o campeão para kernels de 8MB
-        gzip -n -9 < out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.gz
+        
+        # O COMPRESSOR MAIS FORTE: XZ
+        xz -9 -c out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.xz
 
-    - name: 📦 AnyKernel3 Final
+    - name: 📦 AnyKernel3 Final V7
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone https://github.com/osm0sis/AnyKernel3.git
         cat <<EOF > AnyKernel3/anykernel.sh
         properties() { '
-        kernel.string=HMBIRD-V6-G75-PURE
+        kernel.string=HMBIRD-V7-G75-ULTRA-SLIM
         do.devicecheck=0
         do.modules=0
         do.systemless=1
@@ -92,11 +95,11 @@ jobs:
         split_boot;
         flash_boot;
         EOF
-        cp android-kernel/out/arch/arm64/boot/Image.gz AnyKernel3/Image.gz
-        cd AnyKernel3 && zip -r ../AnyKernel3-G75-HMBIRD-V6.zip .
+        cp android-kernel/out/arch/arm64/boot/Image.xz AnyKernel3/Image.xz
+        cd AnyKernel3 && zip -r ../AnyKernel3-G75-V7.zip .
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: HMBIRD-G75-V6-PURE
-        path: kernel_workspace/AnyKernel3-G75-HMBIRD-V6.zip
+        name: HMBIRD-G75-V7-FINAL
+        path: kernel_workspace/AnyKernel3-G75-V7.zip
