@@ -1,4 +1,4 @@
-name: 🏗️ MOTO G75 - V9.1 NUCLEAR SLIM
+name: 🏗️ MOTO G75 - V10 FINAL HOPE
 on:
   workflow_dispatch:
 
@@ -34,62 +34,62 @@ jobs:
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
 
-    - name: 🔧 Configuração V9.1 (O Corte de Mestre)
+    - name: 🔧 Configuração V10 (O Corte Definitivo)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         
-        # 💣 REMOÇÃO DE SUBSISTEMAS GIGANTES (Liberando ~4MB)
+        # ✂️ REMOÇÃO DO KPROBES (Economiza ~2MB e resolve conflitos)
+        echo "# CONFIG_KPROBES is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        echo "CONFIG_KSU_NEXT_MANUAL_HOOK=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        
+        # 💣 MANTENDO OS CORTES DA V9.1 (Som, Vídeo, Wi-Fi base)
         echo "# CONFIG_DRM is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "# CONFIG_SOUND is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "# CONFIG_WLAN is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "# CONFIG_BT is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "# CONFIG_VIDEO_V4L2 is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "# CONFIG_DVB_CORE is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         
-        # ✂️ CORTES DE SUPORTE LEGADO E PERIFÉRICOS
-        echo "# CONFIG_INPUT_JOYSTICK is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "# CONFIG_INPUT_TABLET is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "# CONFIG_INPUT_MOUSE is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "# CONFIG_STAGING is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "# CONFIG_LOGO is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "# CONFIG_NFC is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        
-        # 🧊 MÁXIMA COMPRESSÃO E LIMPEZA DE LOGS
-        echo "CONFIG_CC_OPTIMIZE_FOR_SIZE=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "CONFIG_DEBUG_INFO_NONE=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "# CONFIG_FTRACE is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "# CONFIG_DEBUG_KERNEL is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        
-        # 🚀 BUILDS HMBIRD (PERMANECEM 100%)
+        # 🚀 BUILDS HMBIRD PERFORMANCE
         echo "CONFIG_TCP_CONG_BBR=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "CONFIG_DEFAULT_TCP_CONG=\"bbr\"" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "CONFIG_IP_SET=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "CONFIG_NETFILTER_XT_TARGET_HL=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
-        echo "CONFIG_KPROBES=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
         
         # 📱 SPOOFING S24 Ultra
-        sed -i 's/CONFIG_LOCALVERSION=""/CONFIG_LOCALVERSION="-S928B-HMBIRD-V9-1"/g' arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        sed -i 's/CONFIG_LOCALVERSION=""/CONFIG_LOCALVERSION="-S928B-HMBIRD-V10"/g' arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        echo "CONFIG_CC_OPTIMIZE_FOR_SIZE=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
 
-    - name: 🏗️ Compilação e Super Compressão XZ Extreme
+    - name: 🏗️ Compilação e Compressão
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1 ${{ env.KERNEL_CONFIG }}
         make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1
-        
-        # XZ Extreme - Nível 9
-        xz -9 -e -c out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.xz
+        xz -9 -c out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.xz
 
-    - name: 📦 AnyKernel3 Final
+    - name: 📦 AnyKernel3 Slim (Fix Partition Error)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone https://github.com/osm0sis/AnyKernel3.git
-        sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
+        # Limpar o anykernel.sh para não dar erro de partição
+        cat <<EOF > AnyKernel3/anykernel.sh
+        properties() { '
+        kernel.string=HMBIRD-V10-G75
+        do.devicecheck=0
+        do.modules=0
+        do.systemless=1
+        do.cleanup=1
+        '; }
+        block=auto;
+        is_slot_device=auto;
+        . tools/ak3-core.sh;
+        split_boot;
+        flash_boot;
+        EOF
         cp android-kernel/out/arch/arm64/boot/Image.xz AnyKernel3/Image.xz
-        cd AnyKernel3 && zip -r ../HMBIRD-V9-1.zip .
+        cd AnyKernel3 && zip -r ../HMBIRD-V10.zip .
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: HMBIRD-V9-1-FINAL
-        path: kernel_workspace/HMBIRD-V9-1.zip
+        name: HMBIRD-V10-FINAL
+        path: kernel_workspace/HMBIRD-V10.zip
