@@ -27,55 +27,30 @@ jobs:
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
 
-    - name: 🔧 Configuração "Açougueiro" (Removendo Drivers inúteis)
+    - name: 🔧 Configuração "Corte Cirúrgico"
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        # Primeiro gera o config padrão sem erros
         make O=out ARCH=arm64 gki_defconfig
         
+        # Agora aplicamos as melhorias e os cortes de tamanho
         ./scripts/config --file out/.config \
           -e CONFIG_KSU_NEXT_MANUAL_HOOK \
           -e CONFIG_KSU_SUSFS \
           -e CONFIG_TCP_CONG_BBR \
           -e CONFIG_NETFILTER_XT_TARGET_HL \
           -e CONFIG_IP_SET \
-          -e CONFIG_IP_SET_HASH_NET \
-          -e CONFIG_IP_SET_HASH_IP \
           -e CONFIG_CC_OPTIMIZE_FOR_SIZE \
           -e CONFIG_LTO_CLANG_THIN \
           -d CONFIG_DEBUG_KERNEL \
           -d CONFIG_DEBUG_INFO \
           -d CONFIG_KALLSYMS \
-          -d CONFIG_KPROBES \
-          -d CONFIG_UPROBES \
-          -d CONFIG_MEDIA_SUPPORT \
-          -d CONFIG_INPUT_JOYSTICK \
-          -d CONFIG_INPUT_TABLET \
-          -d CONFIG_WLAN_VENDOR_ADMTEK \
-          -d CONFIG_WLAN_VENDOR_ATH \
-          -d CONFIG_WLAN_VENDOR_ATMEL \
-          -d CONFIG_WLAN_VENDOR_BROADCOM \
-          -d CONFIG_WLAN_VENDOR_CISCO \
           -d CONFIG_WLAN_VENDOR_INTEL \
-          -d CONFIG_WLAN_VENDOR_INTERSIL \
-          -d CONFIG_WLAN_VENDOR_MARVELL \
           -d CONFIG_WLAN_VENDOR_MEDIATEK \
-          -d CONFIG_WLAN_VENDOR_MICROCHIP \
-          -d CONFIG_WLAN_VENDOR_PURELIFI \
-          -d CONFIG_WLAN_VENDOR_RALINK \
           -d CONFIG_WLAN_VENDOR_REALTEK \
-          -d CONFIG_WLAN_VENDOR_RSI \
-          -d CONFIG_WLAN_VENDOR_SILABS \
-          -d CONFIG_WLAN_VENDOR_ST \
-          -d CONFIG_WLAN_VENDOR_TI \
-          -d CONFIG_WLAN_VENDOR_ZYDAS \
           -d CONFIG_DRM_AMDGPU \
-          -d CONFIG_DRM_RADEON \
           -d CONFIG_DRM_NOUVEAU \
-          -d CONFIG_HAMRADIO \
-          -d CONFIG_CAN \
-          -d CONFIG_BT_HCIBTUSB \
-          -d CONFIG_SOUND \
-          --set-str CONFIG_LOCALVERSION "-HMBIRD-V19-SLIM"
+          --set-str CONFIG_LOCALVERSION "-HMBIRD-V19.3"
 
     - name: 🏗️ Compilação Otimizada
       run: |
