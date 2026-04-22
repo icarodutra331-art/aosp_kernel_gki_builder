@@ -1,4 +1,4 @@
-name: 🏗️ MOTO G75 - V15.1 FINAL
+name: 🏗️ MOTO G75 - V17 FINAL SAVIOR
 on:
   workflow_dispatch:
 
@@ -34,7 +34,7 @@ jobs:
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
 
-    - name: 🔧 Configuração V15.1 (Modo Engenharia)
+    - name: 🔧 Configuração V17 (Ajuste de Tamanho Extremo)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         make O=out ARCH=arm64 ${{ env.KERNEL_CONFIG }}
@@ -43,44 +43,38 @@ jobs:
           -e CONFIG_KSU_NEXT_MANUAL_HOOK \
           -e CONFIG_KSU_SUSFS \
           -e CONFIG_TCP_CONG_BBR \
-          -e CONFIG_IP_SET \
-          -e CONFIG_NETFILTER_XT_TARGET_HL \
           -e CONFIG_CC_OPTIMIZE_FOR_SIZE \
-          -e CONFIG_LD_DEAD_CODE_DATA_ELIMINATION \
           -d CONFIG_DEBUG_KERNEL \
           -d CONFIG_DEBUG_INFO \
-          -d CONFIG_KALLSYMS \
-          -d CONFIG_KALLSYMS_ALL \
-          -d CONFIG_KPROBES \
-          --set-str CONFIG_LOCALVERSION "-HMBIRD-V15-FATAL"
+          --set-str CONFIG_LOCALVERSION "-HMBIRD-V17"
 
-    - name: 🏗️ Compilação (Estágio Seguro)
+    - name: 🏗️ Compilação e Redução de Tamanho
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1
         
-        # LOG DE TAMANHO (Para análise posterior)
-        echo "Tamanho do Image original:"
-        du -h out/arch/arm64/boot/Image
+        # 1. Strip dos símbolos para ganhar espaço (Essencial para < 6MB)
+        llvm-strip --strip-debug out/arch/arm64/boot/Image
         
-        # Compressão XZ máxima com dicionário otimizado
-        xz -9 -e -C crc32 out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.xz
+        # 2. Compressão XZ Nível 9 (O melhor que existe)
+        xz -9 -e -c out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.xz
         
-        echo "Tamanho do Image.xz final:"
-        du -h out/arch/arm64/boot/Image.xz
+        # Verificar tamanho para o usuário
+        ls -lh out/arch/arm64/boot/Image.xz
 
-    - name: 📦 AnyKernel3 (Flash init_boot)
+    - name: 📦 AnyKernel3 (Caminho Especial)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone https://github.com/osm0sis/AnyKernel3.git
         cat <<EOF > AnyKernel3/anykernel.sh
         properties() { '
-        kernel.string=HMBIRD-V15.1-G75
+        kernel.string=HMBIRD-V17-G75
         do.devicecheck=0
         do.modules=0
         do.systemless=1
         do.cleanup=1
         '; }
+        # Motorola G75 usa init_boot
         block=/dev/block/by-name/init_boot;
         is_slot_device=1;
         . tools/ak3-core.sh;
@@ -88,10 +82,10 @@ jobs:
         flash_boot;
         EOF
         cp android-kernel/out/arch/arm64/boot/Image.xz AnyKernel3/Image.xz
-        cd AnyKernel3 && zip -r ../HMBIRD-V15-1.zip .
+        cd AnyKernel3 && zip -r ../HMBIRD-V17.zip .
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: HMBIRD-V15-1-FINAL
-        path: kernel_workspace/HMBIRD-V15-1.zip
+        name: HMBIRD-V17-FINAL
+        path: kernel_workspace/HMBIRD-V17.zip
