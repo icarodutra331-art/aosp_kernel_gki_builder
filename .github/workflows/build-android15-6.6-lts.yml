@@ -1,4 +1,4 @@
-name: 🏗️ MOTO G75 - V19.4 STABLE
+name: 🏗️ MOTO G75 - V19.5 FINAL DEFINITIVE
 on:
   workflow_dispatch:
 
@@ -27,7 +27,7 @@ jobs:
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
 
-    - name: 🔧 Configuração V19.4 (Sem Crash e Leve)
+    - name: 🔧 Configuração V19.5 (Ouro Negro)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         make O=out ARCH=arm64 gki_defconfig
@@ -39,20 +39,52 @@ jobs:
           -e CONFIG_NETFILTER_XT_TARGET_HL \
           -e CONFIG_IP_SET \
           -e CONFIG_CC_OPTIMIZE_FOR_SIZE \
+          -e CONFIG_LD_DEAD_CODE_DATA_ELIMINATION \
           -d CONFIG_DEBUG_INFO \
-          -d CONFIG_DEBUG_INFO_REDUCED \
-          -d CONFIG_DEBUG_INFO_COMPRESSED \
           -d CONFIG_DEBUG_INFO_BTF \
+          -d CONFIG_KALLSYMS \
+          -d CONFIG_KALLSYMS_ALL \
           --set-str CONFIG_LOCALVERSION "-HMBIRD-STABLE"
 
-    - name: 🏗️ Compilação (Otimizada para Tamanho)
+    - name: 🏗️ Compilação e Pesagem
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        # Compilando sem mexer no LTO padrão para evitar o Error 134
         make -j$(nproc --all) O=out ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1
         
-        # Strip apenas de debug (seguro)
+        # Strip e Compressão Máxima
         llvm-strip --strip-debug out/arch/arm64/boot/Image
+        xz -9 -e --check=crc32 out/arch/arm64/boot/Image
         
-        # Compressão XZ Máxima
-        xz -9 -e --check=crc32 out
+        echo "RESULTADO FINAL:"
+        echo "Image Descomprimida:" && du -h out/arch/arm64/boot/Image
+        echo "Image.xz (O que vai no ZIP):" && du -h out/arch/arm64/boot/Image.xz
+
+    - name: 📦 AnyKernel3 (Ajustado para Header v4)
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace
+        git clone https://github.com/osm0sis/AnyKernel3.git
+        cp $GITHUB_WORKSPACE/init_boot.img AnyKernel3/init_boot.img
+        cp android-kernel/out/arch/arm64/boot/Image.xz AnyKernel3/Image.xz
+        
+        cat <<EOF > AnyKernel3/anykernel.sh
+        properties() { '
+        kernel.string=HMBIRD-V19.5-G75
+        do.devicecheck=0
+        do.modules=0
+        do.systemless=1
+        do.cleanup=1
+        '; }
+        block=/dev/block/by-name/init_boot;
+        is_slot_device=1;
+        . tools/ak3-core.sh;
+        split_boot;
+        # Mudamos para flash_boot para preservar a integridade do header v4
+        flash_boot; 
+        EOF
+        cd AnyKernel3 && zip -r ../G75-DEFINITIVE-V19.5.zip .
+
+    - name: Upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: G75-V19.5-TOTAL
+        path: G75-DEFINITIVE-V19.5.zip
