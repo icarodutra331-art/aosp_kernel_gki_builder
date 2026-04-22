@@ -1,45 +1,95 @@
-name: 🏗️ PREBUILT_A15-6.6-LTS
+name: 🏗️ MOTO G75 - HMBIRD GKI 6.6-8 (4K+IPSET+IPv6)
 on:
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Fazer Release?"
+        required: true
+        default: true
+        type: boolean
 
 jobs:
-
-  PREBUILT_A15_6_6_LTS:
+  build:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
+    env:
+      KERNEL_SOURCE: "https://android.googlesource.com/kernel/common"
+      KERNEL_SOURCE_BRANCH: "android15-6.6-8"
+      KERNEL_CONFIG: "gki_defconfig"
+      ARCH: "arm64"
     steps:
-      - name: "👨‍🔧 Setup build environment"
-        run: curl https://raw.githubusercontent.com/akhilnarang/scripts/master/setup/android_build_env.sh | bash -
-      - name: "⏳ Clone Repo, Sync & Build."
-        run: repo init -u https://gitlab.com/xprateek/kernel_manifest -b common-android15-6.6-lts --depth=1 && repo sync && tools/bazel build --config=fast //common:kernel_aarch64_dist
-      - name: "📄 Generating Release Tag"
-        id: tag
-        run: echo "release_tag=xprateek/PREBUILT_A15-6.6-LTS-$(date +"%Y.%m.%d")" >> $GITHUB_OUTPUT
-      - name: "🗃️ Create Release"
-        uses:  softprops/action-gh-release@4634c16e79c963813287e889244c50009e7f0981
-        with:
-          tag_name: ${{ steps.tag.outputs.release_tag }}
-          files: /home/runner/work/aosp_kernel_gki_builder/aosp_kernel_gki_builder/out/android15-6.6/dist/Image
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          repository: xprateek/aosp_kernel_gki_builder
-          TOKEN: ${{ secrets.TOKEN }}
+    - name: Checkout
+      uses: actions/checkout@v4
 
-  PREBUILT_A15_6_6_LTS_KSU:
-    runs-on: ubuntu-latest
-    steps:
-      - name: "👨‍🔧 Setup build environment"
-        run: curl https://raw.githubusercontent.com/akhilnarang/scripts/master/setup/android_build_env.sh | bash -
-      - name: "⏳ Clone Repo, Sync & Build."
-        run: repo init -u https://gitlab.com/xprateek/kernel_manifest -b common-android15-6.6-lts --depth=1 && repo sync && cd common && curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash - && cd ../ && tools/bazel build --config=fast //common:kernel_aarch64_dist
-      - name: "📄 Generating Release Tag"
-        id: tag
-        run: echo "release_tag=xprateek/PREBUILT_A15-6.6_KSU-LTS-$(date +"%Y.%m.%d")" >> $GITHUB_OUTPUT
-      - name: "🗃️ Create Release"
-        uses:  softprops/action-gh-release@4634c16e79c963813287e889244c50009e7f0981
-        with:
-          tag_name: ${{ steps.tag.outputs.release_tag }}
-          files: /home/runner/work/aosp_kernel_gki_builder/aosp_kernel_gki_builder/out/android15-6.6/dist/Image
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          repository: xprateek/aosp_kernel_gki_builder
-          TOKEN: ${{ secrets.TOKEN }}
+    - name: Instalar Ferramentas
+      run: |
+        sudo apt update && sudo apt install -y git ccache flex bison build-essential bc curl libssl-dev libelf-dev clang lld llvm
+        mkdir -p $GITHUB_WORKSPACE/kernel_workspace
+
+    - name: Memória Swap (10GB)
+      uses: pierotofy/set-swap-space@master
+      with:
+        swap-size-gb: 10
+
+    - name: Download Fonte Kernel (6.6-8)
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace
+        git clone ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} android-kernel --depth=1
+
+    - name: Injetar KernelSU Next + SusFS
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+        git clone https://gitlab.com/simonpunk/susfs4kernel.git
+        cp susfs4kernel/kernel_patches/fs/susfs.c fs/
+        cp susfs4kernel/kernel_patches/include/linux/susfs.h include/linux/
+
+    - name: Configuração HMBIRD (4K + IPSET + IPv6 + BBR + TTL)
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        # FORÇAR 4K PAGE SIZE
+        echo "CONFIG_ARM64_4K_PAGES=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        echo "# CONFIG_ARM64_16K_PAGES is not set" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        
+        # IP_SET & NETFILTER (Rede Avançada)
+        echo "CONFIG_IP_SET=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        echo "CONFIG_IP_SET_HASH_IP=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        echo "CONFIG_IP_SET_HASH_NET=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        
+        # IPv6 NAT & Masquerade
+        echo "CONFIG_IP6_NF_NAT=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        echo "CONFIG_IP6_NF_TARGET_MASQUERADE=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        echo "CONFIG_IP6_NF_TARGET_NPT=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        
+        # BBR & TTL & Unicode
+        echo "CONFIG_TCP_CONG_BBR=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        echo "CONFIG_NETFILTER_XT_TARGET_HL=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        echo "CONFIG_UNICODE=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        
+        # Root & Anti-Duck
+        echo "CONFIG_KPROBES=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+        
+        # Spoofing S24 Ultra
+        sed -i 's/CONFIG_LOCALVERSION=""/CONFIG_LOCALVERSION="-S928B-Samsung-S24Ultra-HMBIRD-4K-v2"/g' arch/arm64/configs/${{ env.KERNEL_CONFIG }}
+
+    - name: Compilação GKI
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1 ${{ env.KERNEL_CONFIG }}
+        make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1
+
+    - name: Gerar AnyKernel3
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace
+        git clone https://github.com/osm0sis/AnyKernel3.git
+        sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
+        cp android-kernel/out/arch/arm64/boot/Image AnyKernel3/
+        cd AnyKernel3 && zip -r ../AnyKernel3-G75-HMBIRD-FINAL.zip .
+
+    - name: Upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: Kernel-MotoG75-HMBIRD-FINAL
+        path: kernel_workspace/AnyKernel3-G75-HMBIRD-FINAL.zip
