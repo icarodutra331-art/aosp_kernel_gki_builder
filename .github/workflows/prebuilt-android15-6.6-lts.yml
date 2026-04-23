@@ -1,4 +1,4 @@
-name: 🏗️ MOTO G75 - V60 HMBIRD-V10M
+name: 🏗️ MOTO G75 - V62 ULTIMATE
 on:
   workflow_dispatch:
 
@@ -26,71 +26,72 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} android-kernel --depth=1
 
-    - name: ඞ Injetar KernelSU Next + SusFS (Build Pack)
+    - name: ඞ Injetar KernelSU Next + SusFS (FIX DEFINITIVO)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        # Setup KSU Next
+        
+        # 1. Setup KSU Next Primeiro
         curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
         
-        # Download SusFS
+        # 2. Download SusFS
         mkdir -p fs include/linux
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
         curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
         
-        # Fix Makefile & Conflito de Struct (Evita Error 2)
+        # 3. Limpeza Cirúrgica do Makefile (Para matar o Error 2)
+        # Remove qualquer linha de susfs se existir e adiciona uma única vez
         sed -i '/susfs.o/d' fs/Makefile
         echo "obj-y += susfs.o" >> fs/Makefile
+        
+        # 4. Renomear structs para não bater de frente com o KSU integrado
         sed -i 's/struct susfs_file_struct/struct susfs_file_struct_ksu/g' fs/susfs.c || true
         sed -i 's/struct susfs_file_struct/struct susfs_file_struct_ksu/g' include/linux/susfs.h || true
 
-    - name: 🔧 Configuração V60 (Arsenal Completo - Sem Cortes)
+    - name: 🔧 Configuração V62 (Arsenal HMBIRD Completo)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         CONF="arch/arm64/configs/${{ env.KERNEL_CONFIG }}"
         
-        # --- KERNELSU & SUSFS ---
-        echo "CONFIG_KSU=y" >> $CONF
-        echo "CONFIG_KSU_NEXT_MANUAL_HOOK=y" >> $CONF
-        echo "CONFIG_KSU_SUSFS=y" >> $CONF
+        # --- Build Pack (Rede, Unicode, Performance) ---
+        {
+          echo "CONFIG_KSU=y"
+          echo "CONFIG_KSU_NEXT_MANUAL_HOOK=y"
+          echo "CONFIG_KSU_SUSFS=y"
+          echo "CONFIG_TCP_CONG_BBR=y"
+          echo "CONFIG_DEFAULT_TCP_CONG=\"bbr\""
+          echo "CONFIG_NETFILTER_XT_TARGET_HL=y"
+          echo "CONFIG_NETFILTER_XT_TARGET_TTL=y"
+          echo "CONFIG_IP_SET=y"
+          echo "CONFIG_IP6_NF_NAT=y"
+          echo "CONFIG_IP6_NF_TARGET_MASQUERADE=y"
+          echo "CONFIG_NLS_UTF8=y"
+          echo "CONFIG_UNICODE=y"
+          # S24U Identidade (Igual sua V10)
+          echo "CONFIG_LOCALVERSION=\"-S928B-HMBIRD-V62\""
+          echo "CONFIG_CC_OPTIMIZE_FOR_SIZE=y"
+        } >> $CONF
 
-        # --- PERFORMANCE & REDE (BBR, TTL, IP_SET, NAT) ---
-        echo "CONFIG_TCP_CONG_BBR=y" >> $CONF
-        echo "CONFIG_DEFAULT_TCP_CONG=\"bbr\"" >> $CONF
-        echo "CONFIG_NETFILTER_XT_TARGET_HL=y" >> $CONF
-        echo "CONFIG_NETFILTER_XT_TARGET_TTL=y" >> $CONF
-        echo "CONFIG_IP_SET=y" >> $CONF
-        echo "CONFIG_IP6_NF_NAT=y" >> $CONF
-        echo "CONFIG_IP6_NF_TARGET_MASQUERADE=y" >> $CONF
-
-        # --- SUPORTE UNICODE (UnicodePad/Emoji) ---
-        echo "CONFIG_NLS_UTF8=y" >> $CONF
-        echo "CONFIG_UNICODE=y" >> $CONF
-        
-        # --- IDENTIDADE & OTIMIZAÇÃO ---
-        # Removido os bloqueios de Som/Wi-Fi da V10 original pois agora temos espaço!
-        sed -i 's/CONFIG_LOCALVERSION=""/CONFIG_LOCALVERSION="-S928B-HMBIRD-V60"/g' $CONF
-        echo "CONFIG_CC_OPTIMIZE_FOR_SIZE=y" >> $CONF
-
-    - name: 🏗️ Compilação Turbo
+    - name: 🏗️ Compilação e Lipoaspiração (Strip)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1 ${{ env.KERNEL_CONFIG }}
         make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1
         
-        # Limpeza e compressão máxima
+        # Strip símbolos e comprime no máximo (Extreme)
         llvm-strip --strip-debug out/arch/arm64/boot/Image
-        xz -9 -c out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.xz
+        xz -9 -e -c out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.xz
 
-    - name: 📦 AnyKernel3 (Lógica Xennet Terminator)
+    - name: 📦 AnyKernel3 (DNA Xennet Terminator)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone https://github.com/osm0sis/AnyKernel3.git
         cp android-kernel/out/arch/arm64/boot/Image.xz AnyKernel3/Image.xz
         
+        # Script IDÊNTICO ao Xennet que deu certo no seu celular
         cat <<EOF > AnyKernel3/anykernel.sh
         ### AnyKernel setup
         properties() { '
-        kernel.string=HMBIRD-V60-V10M by Gemini
+        kernel.string=HMBIRD V62 (Xennet Logic)
         do.devicecheck=0
         do.modules=0
         do.systemless=1
@@ -107,7 +108,7 @@ jobs:
 
         . tools/ak3-core.sh;
 
-        # Lógica de detecção GKI (Xennet Style)
+        # Lógica de detecção de GKI do seu print
         kernel_version=\$(cat /proc/version | awk -F '-' '{print \$1}' | awk '{print \$3}')
         case \$kernel_version in
             5.1*) ksu_supported=true ;;
@@ -128,10 +129,10 @@ jobs:
         fi
         EOF
         
-        cd AnyKernel3 && zip -r ../G75-V60-V10M.zip .
+        cd AnyKernel3 && zip -r ../G75-V62-FINAL.zip .
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: HMBIRD-V60-FINAL
-        path: G75-V60-V10M.zip
+        name: HMBIRD-V62-ULTIMATE
+        path: G75-V62-FINAL.zip
