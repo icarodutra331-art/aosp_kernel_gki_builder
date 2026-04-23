@@ -1,4 +1,4 @@
-name: 🏗️ MOTO G75 - V39 FINAL SLIM
+name: 🏗️ MOTO G75 - V41 SLIM FIX
 on:
   workflow_dispatch:
 
@@ -25,7 +25,7 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} android-kernel --depth=1
 
-    - name: ඞ Injetar KSU Next + SusFS (Fix Makefile & Conflito)
+    - name: ඞ Injetar KSU Next + SusFS (FIX DEFINITIVO DO ERROR 2)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
@@ -33,62 +33,58 @@ jobs:
         curl -L "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
         curl -L "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
         
-        # Injeção limpa no Makefile (Evita Error 2 na linha 1968)
-        sed -i '/susfs.o/d' fs/Makefile
-        echo "obj-y += susfs.o" >> fs/Makefile
-        
-        # FIX DE CONFLITO: Renomeia estruturas para o Linker não travar
+        # 1. Renomeia a struct para não brigar com o KSU (Isso mata o Error 2)
         sed -i 's/struct susfs_file_struct/struct susfs_file_struct_ksu/g' fs/susfs.c || true
         sed -i 's/struct susfs_file_struct/struct susfs_file_struct_ksu/g' include/linux/susfs.h || true
+        
+        # 2. Injeção limpa no Makefile
+        sed -i '/susfs.o/d' fs/Makefile
+        echo "obj-y += susfs.o" >> fs/Makefile
 
-    - name: 🔧 Configuração V39 (Cortes Finais para < 6MB)
+    - name: 🔧 Configuração V41 (Corte Bruto para 5.5MB)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         CONF="arch/arm64/configs/${{ env.KERNEL_CONFIG }}"
         
-        # --- ATIVAÇÕES (KSU + REDE) ---
+        # ATIVAÇÕES
         echo "CONFIG_KSU_NEXT_MANUAL_HOOK=y" >> $CONF
         echo "CONFIG_KSU_SUSFS=y" >> $CONF
         echo "CONFIG_TCP_CONG_BBR=y" >> $CONF
         echo "CONFIG_IP_SET=y" >> $CONF
         echo "CONFIG_NETFILTER_XT_TARGET_HL=y" >> $CONF
 
-        # --- ✂️ REMOVENDO O QUE PESA (Mouses, Digital, Câmera e Idiomas) ---
-        echo "# CONFIG_INPUT_MOUSE is not set" >> $CONF
+        # ✂️ REMOVE O QUE PESA (Digital, Câmera, Mouse, Idiomas)
         echo "# CONFIG_FINGERPRINT is not set" >> $CONF
-        echo "# CONFIG_MEDIA_SUPPORT is not set" >> $CONF # Tira Câmera/FaceID
-        echo "# CONFIG_VIDEO_V4L2 is not set" >> $CONF
-        
-        sed -i '/CONFIG_NLS_/d' $CONF # Limpa Idiomas
+        echo "# CONFIG_MEDIA_SUPPORT is not set" >> $CONF
+        echo "# CONFIG_INPUT_MOUSE is not set" >> $CONF
+        sed -i '/CONFIG_NLS_/d' $CONF
         echo "CONFIG_NLS_DEFAULT=\"utf8\"" >> $CONF
         echo "CONFIG_NLS_UTF8=y" >> $CONF
 
-        # --- ✂️ REMOVENDO DEBUG (O que fazia dar 8MB) ---
+        # ✂️ REMOVE DEBUG E TRACING (O segredo dos 5.5MB)
         sed -i '/CONFIG_DEBUG_INFO/d' $CONF
         sed -i '/CONFIG_KALLSYMS/d' $CONF
+        sed -i '/CONFIG_LTO/d' $CONF
         echo "# CONFIG_DEBUG_INFO is not set" >> $CONF
         echo "# CONFIG_KALLSYMS is not set" >> $CONF
-        echo "# CONFIG_FTRACE is not set" >> $CONF
-        echo "# CONFIG_STACKTRACE is not set" >> $CONF
-        
-        # Otimização por tamanho (CC_OPTIMIZE_FOR_SIZE)
+        echo "CONFIG_LTO_NONE=y" >> $CONF
         echo "CONFIG_CC_OPTIMIZE_FOR_SIZE=y" >> $CONF
         
-        sed -i 's/CONFIG_LOCALVERSION=""/CONFIG_LOCALVERSION="-HMBIRD-V39"/g' $CONF
+        sed -i 's/CONFIG_LOCALVERSION=""/CONFIG_LOCALVERSION="-HMBIRD-V41"/g' $CONF
 
-    - name: 🏗️ Compilação e Strip Industrial
+    - name: 🏗️ Compilação e Lixa Final (Strip)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         make O=out ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1 ${{ env.KERNEL_CONFIG }}
         make -j$(nproc --all) O=out ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1
         
-        # Strip Máximo: Remove até o que não deve ser removido
+        # Strip Máximo de símbolos e seções inúteis
         llvm-strip --strip-all --strip-debug --remove-section=.comment --remove-section=.note out/arch/arm64/boot/Image
         
-        # Compressão XZ Extrema
+        # Compressão Máxima XZ
         xz -9 -e -c out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.xz
         
-        echo "--- TAMANHO DO IMAGE.XZ ---"
+        echo "--- TAMANHO FINAL DO ARQUIVO ---"
         du -h out/arch/arm64/boot/Image.xz
 
     - name: 📦 AnyKernel3
@@ -96,10 +92,10 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone https://github.com/osm0sis/AnyKernel3.git
         cp android-kernel/out/arch/arm64/boot/Image.xz AnyKernel3/Image.xz
-        cd AnyKernel3 && zip -r ../G75-V39-FINAL.zip .
+        cd AnyKernel3 && zip -r ../G75-V41-FINAL.zip .
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: G75-V39-SLIM
-        path: G75-V39-FINAL.zip
+        name: G75-V41-SLIM
+        path: G75-V41-FINAL.zip
