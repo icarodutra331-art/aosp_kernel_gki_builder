@@ -1,4 +1,4 @@
-name: 🏗️ MOTO G75 - V41 SLIM FIX
+name: 🏗️ MOTO G75 - V45 FINAL SLIM
 on:
   workflow_dispatch:
 
@@ -11,6 +11,7 @@ jobs:
       KERNEL_SOURCE: "https://android.googlesource.com/kernel/common"
       KERNEL_SOURCE_BRANCH: "android15-6.6"
       KERNEL_CONFIG: "gki_defconfig"
+      ARCH: "arm64"
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -25,77 +26,80 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} android-kernel --depth=1
 
-    - name: ඞ Injetar KSU Next + SusFS (FIX DEFINITIVO DO ERROR 2)
+    - name: ඞ Injetar KSU Next + SusFS (Fix Linker)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        # Setup oficial do KSU Next
         curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
+        
+        # SusFS Files
         mkdir -p fs include/linux
         curl -L "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
         curl -L "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
         
-        # 1. Renomeia a struct para não brigar com o KSU (Isso mata o Error 2)
+        # FIX DUPLICATA (Mata o Error 2)
         sed -i 's/struct susfs_file_struct/struct susfs_file_struct_ksu/g' fs/susfs.c || true
         sed -i 's/struct susfs_file_struct/struct susfs_file_struct_ksu/g' include/linux/susfs.h || true
         
-        # 2. Injeção limpa no Makefile
+        # Registro limpo no Makefile
         sed -i '/susfs.o/d' fs/Makefile
         echo "obj-y += susfs.o" >> fs/Makefile
 
-    - name: 🔧 Configuração V41 (Corte Bruto para 5.5MB)
+    - name: 🔧 Configuração V45 (Remoção Bruta de Drivers e Debug)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         CONF="arch/arm64/configs/${{ env.KERNEL_CONFIG }}"
         
-        # ATIVAÇÕES
+        # ATIVAÇÕES (Root e Redes)
         echo "CONFIG_KSU_NEXT_MANUAL_HOOK=y" >> $CONF
         echo "CONFIG_KSU_SUSFS=y" >> $CONF
         echo "CONFIG_TCP_CONG_BBR=y" >> $CONF
         echo "CONFIG_IP_SET=y" >> $CONF
-        echo "CONFIG_NETFILTER_XT_TARGET_HL=y" >> $CONF
-
-        # ✂️ REMOVE O QUE PESA (Digital, Câmera, Mouse, Idiomas)
-        echo "# CONFIG_FINGERPRINT is not set" >> $CONF
-        echo "# CONFIG_MEDIA_SUPPORT is not set" >> $CONF
-        echo "# CONFIG_INPUT_MOUSE is not set" >> $CONF
-        sed -i '/CONFIG_NLS_/d' $CONF
-        echo "CONFIG_NLS_DEFAULT=\"utf8\"" >> $CONF
-        echo "CONFIG_NLS_UTF8=y" >> $CONF
-
-        # ✂️ REMOVE DEBUG E TRACING (O segredo dos 5.5MB)
+        
+        # ✂️ REMOÇÃO TOTAL (Digital, Câmera, Mouse, Idiomas e Debug)
+        # Usamos o 'sed' para apagar qualquer linha que o builder possa tentar usar
+        sed -i '/CONFIG_FINGERPRINT/d' $CONF
+        sed -i '/CONFIG_MEDIA_SUPPORT/d' $CONF
+        sed -i '/CONFIG_INPUT_MOUSE/d' $CONF
         sed -i '/CONFIG_DEBUG_INFO/d' $CONF
         sed -i '/CONFIG_KALLSYMS/d' $CONF
         sed -i '/CONFIG_LTO/d' $CONF
+        
+        # Força o estado desativado e otimização por tamanho
+        echo "# CONFIG_FINGERPRINT is not set" >> $CONF
+        echo "# CONFIG_MEDIA_SUPPORT is not set" >> $CONF
+        echo "# CONFIG_INPUT_MOUSE is not set" >> $CONF
         echo "# CONFIG_DEBUG_INFO is not set" >> $CONF
         echo "# CONFIG_KALLSYMS is not set" >> $CONF
         echo "CONFIG_LTO_NONE=y" >> $CONF
         echo "CONFIG_CC_OPTIMIZE_FOR_SIZE=y" >> $CONF
         
-        sed -i 's/CONFIG_LOCALVERSION=""/CONFIG_LOCALVERSION="-HMBIRD-V41"/g' $CONF
+        sed -i 's/CONFIG_LOCALVERSION=""/CONFIG_LOCALVERSION="-HMBIRD-V45"/g' $CONF
 
-    - name: 🏗️ Compilação e Lixa Final (Strip)
+    - name: 🏗️ Compilação e Lixa Total
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        make O=out ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1 ${{ env.KERNEL_CONFIG }}
-        make -j$(nproc --all) O=out ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1
+        make O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1 ${{ env.KERNEL_CONFIG }}
+        # Se o linker AR reclamar, a gente força a limpeza e continua
+        make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1
         
-        # Strip Máximo de símbolos e seções inúteis
-        llvm-strip --strip-all --strip-debug --remove-section=.comment --remove-section=.note out/arch/arm64/boot/Image
+        # Remove símbolos de depuração
+        llvm-strip --strip-all out/arch/arm64/boot/Image
         
         # Compressão Máxima XZ
         xz -9 -e -c out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.xz
         
-        echo "--- TAMANHO FINAL DO ARQUIVO ---"
-        du -h out/arch/arm64/boot/Image.xz
+        echo "PESO FINAL:" && du -h out/arch/arm64/boot/Image.xz
 
     - name: 📦 AnyKernel3
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone https://github.com/osm0sis/AnyKernel3.git
         cp android-kernel/out/arch/arm64/boot/Image.xz AnyKernel3/Image.xz
-        cd AnyKernel3 && zip -r ../G75-V41-FINAL.zip .
+        cd AnyKernel3 && zip -r ../G75-V45-FINAL.zip .
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: G75-V41-SLIM
-        path: G75-V41-FINAL.zip
+        name: G75-V45-FINAL
+        path: kernel_workspace/G75-V45-FINAL.zip
