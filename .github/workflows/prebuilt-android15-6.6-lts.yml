@@ -1,4 +1,4 @@
-name: 🏗️ MOTO G75 - V17 FINAL SAVIOR
+name: 🏗️ MOTO G75 - V29 FINAL HOPE
 on:
   workflow_dispatch:
 
@@ -26,66 +26,81 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} android-kernel --depth=1
 
-    - name: ඞ Injetar KernelSU Next + SusFS
+    - name: ඞ Injetar KSU Next + SusFS (Sem Patches Conflitantes)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        # Injetar KSU Next Oficial
         curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
-        mkdir -p fs include/linux
-        curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
-        curl -LSs "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
-
-    - name: 🔧 Configuração V17 (Ajuste de Tamanho Extremo)
-      run: |
-        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        make O=out ARCH=arm64 ${{ env.KERNEL_CONFIG }}
         
-        ./scripts/config --file out/.config \
-          -e CONFIG_KSU_NEXT_MANUAL_HOOK \
-          -e CONFIG_KSU_SUSFS \
-          -e CONFIG_TCP_CONG_BBR \
-          -e CONFIG_CC_OPTIMIZE_FOR_SIZE \
-          -d CONFIG_DEBUG_KERNEL \
-          -d CONFIG_DEBUG_INFO \
-          --set-str CONFIG_LOCALVERSION "-HMBIRD-V17"
+        # SusFS - Injeção Direta (Igual você tentou antes, mas com fix de conflito)
+        mkdir -p fs include/linux
+        curl -L "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
+        curl -L "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
+        
+        # Registrar o SusFS no Makefile (O segredo é colocar no topo para o compilador ler primeiro)
+        sed -i '1i obj-y += susfs.o' fs/Makefile
+        
+        # Renomear struct para evitar o erro de "Duplicate Definition"
+        sed -i 's/struct susfs_file_struct/struct susfs_file_struct_ksu/g' fs/susfs.c || true
 
-    - name: 🏗️ Compilação e Redução de Tamanho
+    - name: 🔧 Configuração V29 (Base V10 + Filtro de Tamanho)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        CONF="arch/arm64/configs/${{ env.KERNEL_CONFIG }}"
+        
+        # O QUE FUNCIONOU NA V10:
+        echo "CONFIG_KSU_NEXT_MANUAL_HOOK=y" >> $CONF
+        echo "CONFIG_KSU_SUSFS=y" >> $CONF
+        echo "CONFIG_TCP_CONG_BBR=y" >> $CONF
+        echo "CONFIG_IP_SET=y" >> $CONF
+        echo "CONFIG_NETFILTER_XT_TARGET_HL=y" >> $CONF
+        
+        # ✂️ O QUE VAI TIRAR OS 8MB (A FACADA):
+        echo "# CONFIG_DEBUG_INFO is not set" >> $CONF
+        echo "# CONFIG_DEBUG_MISC is not set" >> $CONF
+        echo "# CONFIG_SECTION_MISMATCH_WARN_DETECTION is not set" >> $CONF
+        echo "CONFIG_CC_OPTIMIZE_FOR_SIZE=y" >> $CONF
+        
+        sed -i 's/CONFIG_LOCALVERSION=""/CONFIG_LOCALVERSION="-HMBIRD-V29-FINAL"/g' $CONF
+
+    - name: 🏗️ Compilação e Strip Total
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        make O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1 ${{ env.KERNEL_CONFIG }}
         make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1
         
-        # 1. Strip dos símbolos para ganhar espaço (Essencial para < 6MB)
-        llvm-strip --strip-debug out/arch/arm64/boot/Image
+        # Remove símbolos de depuração (Crucial para o tamanho)
+        llvm-strip --strip-all out/arch/arm64/boot/Image
         
-        # 2. Compressão XZ Nível 9 (O melhor que existe)
+        # Compressão Máxima
         xz -9 -e -c out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.xz
         
-        # Verificar tamanho para o usuário
-        ls -lh out/arch/arm64/boot/Image.xz
+        echo "TAMANHO FINAL:" && du -h out/arch/arm64/boot/Image.xz
 
-    - name: 📦 AnyKernel3 (Caminho Especial)
+    - name: 📦 AnyKernel3
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone https://github.com/osm0sis/AnyKernel3.git
+        cp android-kernel/out/arch/arm64/boot/Image.xz AnyKernel3/Image.xz
+        
         cat <<EOF > AnyKernel3/anykernel.sh
         properties() { '
-        kernel.string=HMBIRD-V17-G75
+        kernel.string=HMBIRD-V29-G75
         do.devicecheck=0
         do.modules=0
         do.systemless=1
         do.cleanup=1
         '; }
-        # Motorola G75 usa init_boot
-        block=/dev/block/by-name/init_boot;
-        is_slot_device=1;
+        block=auto;
+        is_slot_device=auto;
         . tools/ak3-core.sh;
         split_boot;
         flash_boot;
         EOF
-        cp android-kernel/out/arch/arm64/boot/Image.xz AnyKernel3/Image.xz
-        cd AnyKernel3 && zip -r ../HMBIRD-V17.zip .
+        cd AnyKernel3 && zip -r ../G75-V29-FINAL.zip .
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: HMBIRD-V17-FINAL
-        path: kernel_workspace/HMBIRD-V17.zip
+        name: G75-V29-FINAL
+        path: kernel_workspace/G75-V29-FINAL.zip
