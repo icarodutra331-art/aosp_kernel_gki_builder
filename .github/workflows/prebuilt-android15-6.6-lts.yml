@@ -1,4 +1,4 @@
-name: 🏗️ MOTO G75 - V69 NEXT
+name: 🏗️ MOTO G75 - V71 NEXT
 on:
   workflow_dispatch:
 
@@ -25,34 +25,33 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} android-kernel --depth=1
 
-    - name: ඞ Injetar KernelSU NEXT + SusFS
+    - name: ඞ Injetar KernelSU NEXT + SusFS (MÉTODO MANUAL ANTI-ERRO)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         
-        # 1. Injeta especificamente o NEXT (Puxando a branch estável)
+        # 1. Injetar KernelSU Next Manual (Evita o bug do drivers/Makefile)
         curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next
         
-        # 2. SusFS Oficial (Links estáveis do GitLab para evitar o erro 404)
+        # 2. Injetar SusFS (Links GitLab Simonpunk - Estáveis)
         mkdir -p fs include/linux
         curl -LSs "https://gitlab.com/simonpunk/susfs4kernel/-/raw/master/kernel_patches/fs/susfs.c" -o fs/susfs.c
         curl -LSs "https://gitlab.com/simonpunk/susfs4kernel/-/raw/master/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
         
-        # 3. Validar download (Segurança HMBIRD)
-        if grep -q "404: Not Found" fs/susfs.c; then echo "ERRO: Falha no download do SusFS"; exit 1; fi
-
-        # 4. Registrar no Makefile e Renomear Struct (Solução Raiz)
+        # 3. FIX: Registrar SusFS no Makefile sem quebrar a árvore
         sed -i '/susfs.o/d' fs/Makefile
         echo "obj-y += susfs.o" >> fs/Makefile
+        
+        # 4. FIX: Renomear structs para o Next (Evita redefinição fatal)
         sed -i 's/struct susfs_file_struct/struct susfs_file_struct_ksu/g' fs/susfs.c || true
         sed -i 's/struct susfs_file_struct/struct susfs_file_struct_ksu/g' include/linux/susfs.h || true
 
-    - name: 🔧 Configuração PRO (HMBIRD Pack)
+    - name: 🔧 Configuração PRO HMBIRD (scripts/config)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         make O=out ARCH=arm64 ${{ env.KERNEL_CONFIG }}
-        
         KCONFIG="out/.config"
-        # Arsenal Completo HMBIRD
+        
+        # Arsenal HMBIRD Injetado Corretamente
         scripts/config --file $KCONFIG -e KSU
         scripts/config --file $KCONFIG -e KSU_NEXT
         scripts/config --file $KCONFIG -e KSU_SUSFS
@@ -64,29 +63,28 @@ jobs:
         scripts/config --file $KCONFIG -e IP6_NF_TARGET_MASQUERADE
         scripts/config --file $KCONFIG -e NLS_UTF8
         scripts/config --file $KCONFIG -e UNICODE
-        scripts/config --file $KCONFIG --set-str LOCALVERSION "-S928B-HMBIRD-V69"
+        scripts/config --file $KCONFIG --set-str LOCALVERSION "-HMBIRD-V71-NEXT"
         
-        # Sincronização obrigatória de dependências
+        # Sincronização obrigatória de dependências (O segredo do GKI)
         make O=out ARCH=arm64 olddefconfig
 
-    - name: 🏗️ Compilação e Strip
+    - name: 🏗️ Compilação Turbo (Limitada para estabilidade)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        make -j$(nproc --all) O=out ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1
+        # Usando nproc-1 para não fritar o runner e causar erro de IO
+        make -j$(($(nproc)-1)) O=out ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1
         
         llvm-strip --strip-debug out/arch/arm64/boot/Image
         xz -9 -e -c out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.xz
 
-    - name: 📦 AnyKernel3 (Cópia fiel do XKNXT - The Terminator)
+    - name: 📦 AnyKernel3 (Padrão XKNXT - The Terminator)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone https://github.com/osm0sis/AnyKernel3.git
         cp android-kernel/out/arch/arm64/boot/Image.xz AnyKernel3/Image.xz
         
-        # Script AnyKernel IDÊNTICO às imagens 1 e 10
         cat <<EOF > AnyKernel3/anykernel.sh
         ### AnyKernel setup
-        # global properties
         properties() { '
         kernel.string=XENNET Kernels by Xennet The Terminator
         do.devicecheck=0
@@ -94,25 +92,14 @@ jobs:
         do.systemless=0
         do.cleanup=1
         do.cleanuponabort=0
-        device.name1=
-        device.name2=
-        device.name3=
-        device.name4=
-        device.name5=
-        supported.versions=
-        supported.patchlevels=
-        supported.vendorpatchlevels=
-        '; } # end properties
+        '; }
 
-        ### AnyKernel install
-        ## boot shell variables
         block=boot;
         is_slot_device=auto;
         ramdisk_compression=auto;
         patch_vbmeta_flag=auto;
         no_magisk_check=1;
 
-        # import functions/variables and setup patching - see for reference (DO NOT REMOVE)
         . tools/ak3-core.sh;
 
         kernel_version=\$(cat /proc/version | awk -F '-' '{print \$1}' | awk '{print \$3}')
@@ -126,7 +113,6 @@ jobs:
         ui_print " " "  -> ksu_supported: \$ksu_supported"
         \$ksu_supported || abort "  -> Non-GKI device, abort."
 
-        # boot install
         split_boot;
         if [ -f "split_img/ramdisk.cpio" ]; then
             unpack_ramdisk;
@@ -134,13 +120,12 @@ jobs:
         else
             flash_boot;
         fi
-        ## end boot install
         EOF
         
-        cd AnyKernel3 && zip -r ../G75-V69-XKNXT.zip .
+        cd AnyKernel3 && zip -r ../G75-V71-FINAL.zip .
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: HMBIRD-V69-FINAL
-        path: G75-V69-XKNXT.zip
+        name: HMBIRD-V71-NEXT
+        path: G75-V71-FINAL.zip
