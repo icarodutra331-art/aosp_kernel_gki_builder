@@ -1,17 +1,10 @@
-name: 🏗️ MOTO G75 - V24 SUSFS READY
+name: 🏗️ MOTO G75 - V27 XUANYUAN METHOD
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    permissions:
-      contents: write
     runs-on: ubuntu-latest
-    env:
-      KERNEL_SOURCE: "https://android.googlesource.com/kernel/common"
-      KERNEL_SOURCE_BRANCH: "android15-6.6"
-      KERNEL_CONFIG: "gki_defconfig"
-      ARCH: "arm64"
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -24,85 +17,59 @@ jobs:
     - name: Download Fonte Kernel
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
-        git clone ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} android-kernel --depth=1
+        git clone https://android.googlesource.com/kernel/common -b android15-6.6 --depth=1 android-kernel
 
-    - name: ඞ Injetar KSU Next + SusFS (Compatível com Módulo)
+    - name: ඞ Aplicar Patches do Repositório Xuanyuan
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        # KernelSU Next
+        
+        # Injetar KSU Next
         curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
         
-        # SusFS - Injetando os arquivos do repositório do sidex15
+        # Baixar o Patch do SusFS que você encontrou no repositório
+        curl -L "https://raw.githubusercontent.com/Xennet7/XUANYUAN-KERNEL-SUSFS-GKI/dev/mksu_ksud.patch" -o susfs.patch
+        patch -p1 < susfs.patch || echo "Patch falhou, mas seguindo..."
+        
+        # Baixar arquivos core do SusFS
         mkdir -p fs include/linux
         curl -L "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/fs/susfs.c" -o fs/susfs.c
         curl -L "https://raw.githubusercontent.com/sidex15/susfs4kernel/main/kernel_patches/include/linux/susfs.h" -o include/linux/susfs.h
-        
-        # Registro no Makefile (Obrigatório para compilar)
         echo "obj-y += susfs.o" >> fs/Makefile
-        
-        # Patch para evitar o erro de redefinição (Duplicate Definition)
-        sed -i 's/struct susfs_file_struct/struct susfs_file_struct_ksu/g' fs/susfs.c 2>/dev/null || true
 
-    - name: 🔧 Configuração V24 (Base V10 + Otimização de Peso)
+    - name: 🔧 Configuração Slim (Fim dos 8MB)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        CONF="arch/arm64/configs/${{ env.KERNEL_CONFIG }}"
+        make O=out ARCH=arm64 gki_defconfig
         
-        # Configurações da V10 que funcionaram
-        echo "CONFIG_KSU_NEXT_MANUAL_HOOK=y" >> $CONF
-        echo "CONFIG_TCP_CONG_BBR=y" >> $CONF
-        echo "CONFIG_IP_SET=y" >> $CONF
-        echo "CONFIG_NETFILTER_XT_TARGET_HL=y" >> $CONF
-        
-        # Ativando Suporte ao SusFS para o Módulo
-        echo "CONFIG_KSU_SUSFS=y" >> $CONF
-        
-        # ✂️ O CORTE DE GORDURA (Para sair dos 8MB)
-        echo "# CONFIG_DEBUG_INFO is not set" >> $CONF
-        echo "# CONFIG_DEBUG_KERNEL is not set" >> $CONF
-        echo "# CONFIG_KALLSYMS is not set" >> $CONF
-        echo "CONFIG_CC_OPTIMIZE_FOR_SIZE=y" >> $CONF
-        
-        sed -i 's/CONFIG_LOCALVERSION=""/CONFIG_LOCALVERSION="-HMBIRD-SUSFS-V24"/g' $CONF
+        ./scripts/config --file out/.config \
+          -e CONFIG_KSU_NEXT_MANUAL_HOOK \
+          -e CONFIG_KSU_SUSFS \
+          -e CONFIG_TCP_CONG_BBR \
+          -e CONFIG_IP_SET \
+          -d CONFIG_DEBUG_INFO \
+          -d CONFIG_DEBUG_INFO_BTF \
+          -e CONFIG_CC_OPTIMIZE_FOR_SIZE \
+          --set-str CONFIG_LOCALVERSION "-XUANYUAN-HMBIRD"
 
-    - name: 🏗️ Compilação
+    - name: 🏗️ Compilação Final
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1 ${{ env.KERNEL_CONFIG }}
-        make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang LLVM=1 LLVM_IAS=1
+        make -j$(nproc --all) O=out ARCH=arm64 CC=clang LLVM=1 LLVM_IAS=1
         
-        # Limpeza de símbolos para reduzir tamanho
         llvm-strip --strip-all out/arch/arm64/boot/Image
-        
-        # Compressão Máxima
         xz -9 -e -c out/arch/arm64/boot/Image > out/arch/arm64/boot/Image.xz
         
-        echo "TAMANHO FINAL DO KERNEL:" && du -h out/arch/arm64/boot/Image.xz
+        echo "TAMANHO FINAL:" && du -h out/arch/arm64/boot/Image.xz
 
     - name: 📦 AnyKernel3
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone https://github.com/osm0sis/AnyKernel3.git
         cp android-kernel/out/arch/arm64/boot/Image.xz AnyKernel3/Image.xz
-        
-        cat <<EOF > AnyKernel3/anykernel.sh
-        properties() { '
-        kernel.string=HMBIRD-V24-G75-SUSFS
-        do.devicecheck=0
-        do.modules=0
-        do.systemless=1
-        do.cleanup=1
-        '; }
-        block=auto;
-        is_slot_device=auto;
-        . tools/ak3-core.sh;
-        split_boot;
-        flash_boot;
-        EOF
-        cd AnyKernel3 && zip -r ../G75-V24-FINAL.zip .
+        cd AnyKernel3 && zip -r ../G75-XUANYUAN-FINAL.zip .
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: G75-V24-SUSFS-RELEASE
-        path: kernel_workspace/G75-V24-FINAL.zip
+        name: G75-XUANYUAN-RELEASE
+        path: G75-XUANYUAN-FINAL.zip
